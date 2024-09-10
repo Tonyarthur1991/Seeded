@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed Granule Prediction</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        input, select { margin: 10px 0; display: block; width: 100%; padding: 5px; }
+        #results { margin-top: 20px; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Seed Granule Prediction</h1>
+    <form id="prediction-form">
+        <label for="liquid-content">Liquid content (0-1):</label>
+        <input type="number" id="liquid-content" step="0.01" min="0" max="1" required>
+
+        <label for="liquid-binder">Liquid binder (w/w%, 0-100):</label>
+        <input type="number" id="liquid-binder" step="0.1" min="0" max="100" required>
+
+        <label for="screw-speed">Screw speed (rpm, 0-1000):</label>
+        <input type="number" id="screw-speed" min="0" max="1000" required>
+
+        <label for="screw-config">Screw configuration:</label>
+        <select id="screw-config">
+            <option value="LS">LS</option>
+            <option value="MS">MS</option>
+            <option value="HSS">HSS</option>
+            <option value="HSL">HSL</option>
+        </select>
+
+        <button type="submit">Predict</button>
+    </form>
+
+    <div id="error" class="error"></div>
+    <div id="results"></div>
+
+    <canvas id="coverageChart"></canvas>
+    <canvas id="numberChart"></canvas>
+
+    <script>
+        const form = document.getElementById('prediction-form');
+        const resultsDiv = document.getElementById('results');
+        const errorDiv = document.getElementById('error');
+        let coverageChart, numberChart;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorDiv.textContent = '';
+            resultsDiv.innerHTML = '';
+            if (coverageChart) coverageChart.destroy();
+            if (numberChart) numberChart.destroy();
+
+            const formData = {
+                liquid_content: parseFloat(document.getElementById('liquid-content').value),
+                liquid_binder: parseFloat(document.getElementById('liquid-binder').value),
+                screw_speed: parseFloat(document.getElementById('screw-speed').value),
+                screw_config: document.getElementById('screw-config').value
+            };
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'An error occurred during prediction.');
+                }
+
+                resultsDiv.innerHTML = `
+                    <h2>Results:</h2>
+                    <p>Predicted Seed Coverage: ${data.predicted_coverage.toFixed(2)}%</p>
+                    <p>Predicted Number of Seeded Granules: ${data.predicted_number.toFixed(2)}</p>
+                    <p>Probability of Producing Seeded Granules: ${data.probability.toFixed(2)}</p>
+                `;
+
+                updateCharts(data);
+            } catch (error) {
+                errorDiv.textContent = error.message;
+            }
+        });
+
+        function updateCharts(data) {
+            coverageChart = new Chart(document.getElementById('coverageChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Predicted Seed Coverage'],
+                    datasets: [{
+                        label: 'Seed Coverage (%)',
+                        data: [data.predicted_coverage],
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)'
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+
+            numberChart = new Chart(document.getElementById('numberChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Predicted Number of Seeded Granules'],
+                    datasets: [{
+                        label: 'Number of Seeded Granules',
+                        data: [data.predicted_number],
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)'
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
